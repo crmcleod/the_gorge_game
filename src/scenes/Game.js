@@ -2,73 +2,114 @@ import { Scene } from 'phaser';
 
 var cursors;
 var player;
-var bomb;
-var zombies;
+var fix;
 var score = 0;
+var remainingFenceSections;
 var scoreText;
+var platforms;
 
-function  interactWithBomb(player, bomb){
-    bomb.disableBody(true, true);
-    
-    score+=10;
-    console.log(score)
-    scoreText.setText(`SCORE: ${score}`)
+function interactWithfix(player, fix, context) {
+    fix.disableBody(true, true);
+
+    score += 1;
+    scoreText.setText(`FENCE SECTIONS FIXED: ${score}`);
+    remainingFenceSections -= 1;
+
+    // Regenerate fix signs if all are collected
+    if (!remainingFenceSections) {
+        addFixSigns(context); // regenerate fix signs
+    }
 }
 
-export class Game extends Scene
-{
-    constructor ()
-    {
+function addFixSigns(context) {
+    // Clear existing 'fix' signs
+    if (context.fix) {
+        context.fix.clear(true, true); // Removes all existing fix signs
+    }
+
+    // Create new 'fix' signs
+    context.fix = context.physics.add.group({
+        key: 'fix',
+        repeat: 11,
+        setXY: { x: 12, y: 10, stepX: 70 }
+    });
+
+    remainingFenceSections = context.fix.getLength(); // set new remaining fence sections
+
+    // Set properties for each 'fix' sign
+    context.fix.children.iterate(function (child) {
+        child.setScale(2);
+        child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+    });
+
+    context.physics.add.collider(context.fix, platforms); // collision with platforms
+    context.physics.add.overlap(player, context.fix, (player, fix) => interactWithfix(player, fix, context), null, context); // pass context to overlap handler
+}
+
+export class Game extends Scene {
+    constructor() {
         super('Game');
     }
 
-    preload ()
-    {
+    preload() {
         this.load.setPath('assets');
-        
+
         this.load.image('background', 'main_scene.png');
-        this.load.image('platform', 'platformblue.png')
-        this.load.image('bomb', 'bomb.png')
-        this.load.spritesheet('dude', 
-            'dude.png',
-            { frameWidth: 32, frameHeight: 48 }
-        );
+        this.load.image('platform', 'platformblue.png');
+        this.load.image('fix', 'fix.png');
+        this.load.spritesheet('dude', 'dude.png', { frameWidth: 32, frameHeight: 48 });
     }
-    create ()
-    {
+
+    create() {
         this.physics.world.setBounds(0, 0, this.sys.game.config.width, 920);
 
         this.add.image(602, 482, 'background');
-        var platforms
         platforms = this.physics.add.staticGroup();
-        platforms.create(602,470, 'platform').setScale(8).refreshBody()
+        platforms.create(602, 470, 'platform').setScale(8).refreshBody();
 
-        player = this.physics.add.sprite(100, 300, 'dude')
+        player = this.physics.add.sprite(100, 300, 'dude').setScale(1.5);
         player.setBounce(0.2);
         player.setCollideWorldBounds(true);
 
         const gameHeight = this.sys.game.config.height;
 
+        this.anims.create({
+            key: 'zombie-walk',
+            frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }), // adjust frame range
+            frameRate: 10,
+            repeat: -1 // loop forever
+        });
 
-        zombies = this.physics.add.sprite(0, gameHeight - 100, 'dude');
-        zombies.setOrigin(0,0)
-        zombies.setCollideWorldBounds(true);
+        this.zombiesHorde = []; // array to store zombies
 
-        zombies.setVelocity(100)
+        // Create zombies
+        for (let i = 0; i < Math.ceil(Math.random() * 10) + 5; i++) {
+            const x = Phaser.Math.Between(50, this.sys.game.config.width - 50); // random x
+            const y = gameHeight - 100; // ground level
 
+            const zombies = this.physics.add.sprite(x, y, 'dude');
+            zombies.setVelocityX(Phaser.Math.Between(80, 120)); // random speed
+            zombies.setCollideWorldBounds(true);
+            zombies.body.onWorldBounds = true;
+            zombies.anims.play('zombie-walk', true);
+
+            this.zombiesHorde.push(zombies);
+        }
+
+        // Player animations
         this.anims.create({
             key: 'left',
             frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
             frameRate: 10,
             repeat: -1
         });
-        
+
         this.anims.create({
             key: 'turn',
-            frames: [ { key: 'dude', frame: 4 } ],
+            frames: [{ key: 'dude', frame: 4 }],
             frameRate: 20
         });
-        
+
         this.anims.create({
             key: 'right',
             frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
@@ -76,50 +117,48 @@ export class Game extends Scene
             repeat: -1
         });
 
-        this.physics.add.collider(player, platforms)
-        bomb = this.physics.add.group({
-            key: 'bomb',
-            repeat: 11,
-            setXY: { x: 12, y: 0, stepX: 70 }
-        })
-        bomb.children.iterate(function (child) {
+        // Zombie world bounds handling
+        this.physics.world.on('worldbounds', (body, up, down, left, right) => {
+            const zombiesObj = body.gameObject;
 
-            child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
-        
+            if (this.zombiesHorde.includes(zombiesObj)) {
+                if (right) { 
+                    zombiesObj.setVelocityX((-Math.random() * 100) - 200);
+                    zombiesObj.setFlipX(true);
+                    zombiesObj.anims.play('zombie-walk', true);
+                } else if (left) {
+                    zombiesObj.setVelocityX((Math.random() * 100) + 200);
+                    zombiesObj.setFlipX(false);
+                    zombiesObj.anims.play('zombie-walk', true);
+                }
+            }
         });
-        this.physics.add.collider(bomb, platforms);
-        this.physics.add.overlap(player, bomb, interactWithBomb, null, this);
 
+        this.physics.add.collider(player, platforms);
+
+        // Initialize fix signs
+        addFixSigns(this);
+
+        // Score text
         scoreText = this.add.text(16, 16, 'SCORE: 0', { fontSize: '32px', fill: '#FFF' });
     }
 
-  
-
     update() {
         cursors = this.input.keyboard.createCursorKeys();
-        if (cursors.left.isDown)
-            {
-                player.setVelocityX(-300);
-            
-                player.anims.play('left', true);
-            }
-            else if (cursors.right.isDown)
-            {
-                player.setVelocityX(300);
-            
-                player.anims.play('right', true);
-            }
-            else
-            {
-                player.setVelocityX(0);
-            
-                player.anims.play('turn');
-            }
-            
-            if (cursors.up.isDown && player.body.touching.down)
-            {
-                player.setVelocityY(-330);
-            }
 
+        if (cursors.left.isDown) {
+            player.setVelocityX(-300);
+            player.anims.play('left', true);
+        } else if (cursors.right.isDown) {
+            player.setVelocityX(300);
+            player.anims.play('right', true);
+        } else {
+            player.setVelocityX(0);
+            player.anims.play('turn');
+        }
+
+        if (cursors.up.isDown && player.body.touching.down) {
+            player.setVelocityY(-330);
+        }
     }
 }
