@@ -2,9 +2,9 @@ import { Scene } from 'phaser';
 
 var cursors;
 var player;
-var fix;
 var score = 0;
 var remainingFenceSections;
+
 var scoreText;
 var platforms;
 
@@ -31,14 +31,15 @@ function addFixSigns(context) {
     context.fix = context.physics.add.group({
         key: 'fix',
         repeat: 11,
-        setXY: { x: 12, y: 10, stepX: 70 }
+        setXY: { x: 120, y: 100, stepX: 70 }
     });
 
     remainingFenceSections = context.fix.getLength(); // set new remaining fence sections
 
     // Set properties for each 'fix' sign
-    context.fix.children.iterate(function (child) {
+    context.fix.children.iterate(function (child, index) {
         child.setScale(2);
+        child.setX(70+((((Math.random()*20)+80)*index)))
         child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
     });
 
@@ -61,6 +62,7 @@ export class Game extends Scene {
     }
 
     create() {
+        this.input.setDefaultCursor('url(/public/assets/crosshair.png), pointer')
         this.physics.world.setBounds(0, 0, this.sys.game.config.width, 920);
 
         this.add.image(602, 482, 'background');
@@ -88,6 +90,11 @@ export class Game extends Scene {
             const y = gameHeight - 100; // ground level
 
             const zombies = this.physics.add.sprite(x, y, 'dude');
+            zombies.setInteractive();
+            zombies.on('pointerdown', (pointer) => {
+                zombies.disableBody(true,true)
+                createRedFlash(pointer.x, pointer.y, this)
+            })
             zombies.setVelocityX(Phaser.Math.Between(80, 120)); // random speed
             zombies.setCollideWorldBounds(true);
             zombies.body.onWorldBounds = true;
@@ -141,6 +148,24 @@ export class Game extends Scene {
 
         // Score text
         scoreText = this.add.text(16, 16, 'SCORE: 0', { fontSize: '32px', fill: '#FFF' });
+
+        function createRedFlash(x, y, context) {
+            const flash = context.add.graphics();
+            flash.fillStyle(0xff0000, 0.6)
+            flash.fillCircle(x, y, 20); // Create a circle at the click position with radius 20
+            
+            flash.setOrigin(x,y)
+            // Tween to scale the circle and fade it out
+            context.tweens.add({
+                targets: flash,
+                alpha: 0, // Fade out
+                scaleX: 3, // Scale up horizontally
+                scaleY: 3, // Scale up vertically
+                duration: 1000, // Duration of the animation (half a second)
+                onComplete: () => {
+                    flash.destroy(); // Destroy the graphic after animation
+                }
+            })}
     }
 
     update() {
